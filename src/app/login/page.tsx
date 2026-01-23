@@ -34,7 +34,7 @@ function VersionDisplay() {
   return (
     <button
       onClick={() =>
-        window.open('https://p.kdocs.cn/s/PQIZ4BAAHU', '_blank')
+        window.open('https://km.wpzy.cc/item/8', '_blank')
       }
       className='absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 transition-colors cursor-pointer'
     >
@@ -51,7 +51,7 @@ function VersionDisplay() {
           {updateStatus === UpdateStatus.NO_UPDATE && (
             <>
               <CheckCircle className='w-3.5 h-3.5' />
-              <span className='font-semibold text-xs'>地址发布页</span>
+              <span className='font-semibold text-xs'>点击购买账号</span>
             </>
           )}
         </div>
