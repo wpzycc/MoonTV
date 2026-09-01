@@ -18,8 +18,6 @@ import {
   getAllPlayRecords,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
-// ✅ 恢复使用 getDoubanCategories（和分类页一样）
-import { getDoubanCategories } from '@/lib/douban.client';
 import { DoubanItem } from '@/lib/types';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
@@ -85,7 +83,7 @@ function HomeClient() {
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
   // ============================================================
-  // ✅ 核心改动：恢复使用 getDoubanCategories（和分类页一样）
+  // 🔧 首页专用：直接请求宝塔代理 https://proxy.wpzy.cc
   // ============================================================
   useEffect(() => {
     const fetchRecommendData = async () => {
@@ -101,46 +99,49 @@ function HomeClient() {
           return;
         }
 
-        // ✅ 使用 getDoubanCategories（和分类页完全一样）
-        const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
+        // 🔧 首页专属：直接请求宝塔代理
+        const DOUBAN_PROXY = 'https://proxy.wpzy.cc';
+        
+        // 辅助函数：从代理获取数据
+        const fetchFromProxy = async (type: string, tag: string) => {
+          const url = `${DOUBAN_PROXY}/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=16&page_start=0`;
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Referer': 'https://movie.douban.com/',
+            },
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          return data.subjects.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            poster: item.cover,
+            rate: item.rate || '',
+            year: item.year || '',
+          }));
+        };
+
+        // 并行请求三类数据
+        const [moviesList, tvShowsList, varietyShowsList, bangumiCalendarData] =
           await Promise.all([
-            getDoubanCategories({
-              kind: 'movie',
-              category: '热门',
-              type: '全部',
-            }),
-            getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
-            getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
+            fetchFromProxy('movie', '热门'),
+            fetchFromProxy('tv', '热门'),
+            fetchFromProxy('tv', '综艺'),
             GetBangumiCalendarData(),
           ]);
 
-        // 处理电影数据
-        if (moviesData.code === 200) {
-          setHotMovies(moviesData.list);
-        } else {
-          console.warn('获取热门电影数据失败:', moviesData);
-          setHotMovies([]);
-        }
-
-        // 处理剧集数据
-        if (tvShowsData.code === 200) {
-          setHotTvShows(tvShowsData.list);
-        } else {
-          console.warn('获取热门剧集数据失败:', tvShowsData);
-          setHotTvShows([]);
-        }
-
-        // 处理综艺数据
-        if (varietyShowsData.code === 200) {
-          setHotVarietyShows(varietyShowsData.list);
-        } else {
-          console.warn('获取热门综艺数据失败:', varietyShowsData);
-          setHotVarietyShows([]);
-        }
-
+        setHotMovies(moviesList);
+        setHotTvShows(tvShowsList);
+        setHotVarietyShows(varietyShowsList);
         setBangumiCalendarData(bangumiCalendarData);
+        
+        console.log('✅ 首页数据通过宝塔代理获取成功');
+
       } catch (error) {
-        console.error('获取推荐数据失败:', error);
+        console.error('❌ 首页获取推荐数据失败:', error);
         setHotMovies([]);
         setHotTvShows([]);
         setHotVarietyShows([]);
