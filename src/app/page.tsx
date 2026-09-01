@@ -18,6 +18,7 @@ import {
   getAllPlayRecords,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
+import { getDoubanCategories } from '@/lib/douban.client';
 import { DoubanItem } from '@/lib/types';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
@@ -82,9 +83,6 @@ function HomeClient() {
 
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
-  // ============================================================
-  // 🔧 首页专用：直接请求宝塔代理 https://proxy.wpzy.cc
-  // ============================================================
   useEffect(() => {
     const fetchRecommendData = async () => {
       try {
@@ -95,56 +93,39 @@ function HomeClient() {
         const isSimpleMode = savedSimpleMode ? JSON.parse(savedSimpleMode) : false;
 
         if (isSimpleMode) {
+          // 简洁模式下跳过豆瓣数据获取
           setLoading(false);
           return;
         }
 
-        // 🔧 首页专属：直接请求宝塔代理
-        const DOUBAN_PROXY = 'https://proxy.wpzy.cc';
-        
-        // 辅助函数：从代理获取数据
-        const fetchFromProxy = async (type: string, tag: string) => {
-          const url = `${DOUBAN_PROXY}/j/search_subjects?type=${type}&tag=${tag}&sort=recommend&page_limit=16&page_start=0`;
-          const response = await fetch(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Referer': 'https://movie.douban.com/',
-            },
-          });
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const data = await response.json();
-          return data.subjects.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            poster: item.cover,
-            rate: item.rate || '',
-            year: item.year || '',
-          }));
-        };
-
-        // 并行请求三类数据
-        const [moviesList, tvShowsList, varietyShowsList, bangumiCalendarData] =
+        // 并行获取热门电影、热门剧集和热门综艺
+        const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
           await Promise.all([
-            fetchFromProxy('movie', '热门'),
-            fetchFromProxy('tv', '热门'),
-            fetchFromProxy('tv', '综艺'),
+            getDoubanCategories({
+              kind: 'movie',
+              category: '热门',
+              type: '全部',
+            }),
+            getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
+            getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
             GetBangumiCalendarData(),
           ]);
 
-        setHotMovies(moviesList);
-        setHotTvShows(tvShowsList);
-        setHotVarietyShows(varietyShowsList);
-        setBangumiCalendarData(bangumiCalendarData);
-        
-        console.log('✅ 首页数据通过宝塔代理获取成功');
+        if (moviesData.code === 200) {
+          setHotMovies(moviesData.list);
+        }
 
+        if (tvShowsData.code === 200) {
+          setHotTvShows(tvShowsData.list);
+        }
+
+        if (varietyShowsData.code === 200) {
+          setHotVarietyShows(varietyShowsData.list);
+        }
+
+        setBangumiCalendarData(bangumiCalendarData);
       } catch (error) {
-        console.error('❌ 首页获取推荐数据失败:', error);
-        setHotMovies([]);
-        setHotTvShows([]);
-        setHotVarietyShows([]);
+        console.error('获取推荐数据失败:', error);
       } finally {
         setLoading(false);
       }
@@ -157,6 +138,7 @@ function HomeClient() {
   const updateFavoriteItems = async (allFavorites: Record<string, any>) => {
     const allPlayRecords = await getAllPlayRecords();
 
+    // 根据保存时间排序（从近到远）
     const sorted = Object.entries(allFavorites)
       .sort(([, a], [, b]) => b.save_time - a.save_time)
       .map(([key, fav]) => {
@@ -164,6 +146,7 @@ function HomeClient() {
         const source = key.slice(0, plusIndex);
         const id = key.slice(plusIndex + 1);
 
+        // 查找对应的播放记录，获取当前集数
         const playRecord = allPlayRecords[key];
         const currentEpisode = playRecord?.index;
 
@@ -193,6 +176,7 @@ function HomeClient() {
 
     loadFavorites();
 
+    // 监听收藏更新事件
     const unsubscribe = subscribeToDataUpdates(
       'favoritesUpdated',
       (newFavorites: Record<string, any>) => {
@@ -205,7 +189,7 @@ function HomeClient() {
 
   const handleCloseAnnouncement = (announcement: string) => {
     setShowAnnouncement(false);
-    localStorage.setItem('hasSeenAnnouncement', announcement);
+    localStorage.setItem('hasSeenAnnouncement', announcement); // 记录已查看弹窗
   };
 
   return (
@@ -229,8 +213,10 @@ function HomeClient() {
 
         <div className='max-w-[95%] mx-auto'>
           {activeTab === 'history' ? (
+            // 历史视图 - 显示所有播放记录的网格布局
             <ContinueWatching showAll={true} />
           ) : activeTab === 'favorites' ? (
+            // 收藏夹视图
             <section className='mb-8'>
               <div className='mb-4 flex items-center justify-between'>
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
@@ -284,9 +270,12 @@ function HomeClient() {
               </div>
             </section>
           ) : (
+            // 首页视图
             <>
+              {/* 继续观看 - 组件内部已处理简洁模式 */}
               <ContinueWatching />
 
+              {/* 简洁模式下只显示收藏夹，但在服务器端渲染时先不渲染 */}
               {isClient && !simpleMode && (
                 <>
                   {/* 热门电影 */}
@@ -306,7 +295,8 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? Array.from({ length: 8 }).map((_, index) => (
+                        ? // 加载状态显示灰色占位数据
+                          Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -317,7 +307,8 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : hotMovies.map((movie, index) => (
+                        : // 显示真实数据
+                          hotMovies.map((movie, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -353,7 +344,8 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? Array.from({ length: 8 }).map((_, index) => (
+                        ? // 加载状态显示灰色占位数据
+                          Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -364,7 +356,8 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : hotTvShows.map((show, index) => (
+                        : // 显示真实数据
+                          hotTvShows.map((show, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -399,7 +392,8 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? Array.from({ length: 8 }).map((_, index) => (
+                        ? // 加载状态显示灰色占位数据
+                          Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -410,7 +404,9 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : (() => {
+                        : // 展示当前日期的番剧
+                          (() => {
+                            // 获取当前日期对应的星期
                             const today = new Date();
                             const weekdays = [
                               'Sun',
@@ -423,6 +419,7 @@ function HomeClient() {
                             ];
                             const currentWeekday = weekdays[today.getDay()];
 
+                            // 找到当前星期对应的番剧数据
                             const todayAnimes =
                               bangumiCalendarData.find(
                                 (item) => item.weekday.en === currentWeekday
@@ -471,7 +468,8 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? Array.from({ length: 8 }).map((_, index) => (
+                        ? // 加载状态显示灰色占位数据
+                          Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -482,7 +480,8 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : hotVarietyShows.map((show, index) => (
+                        : // 显示真实数据
+                          hotVarietyShows.map((show, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
