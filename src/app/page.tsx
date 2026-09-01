@@ -18,8 +18,8 @@ import {
   getAllPlayRecords,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
-// ⚠️ 不再需要 getDoubanCategories，改用 /api/douban
-// import { getDoubanCategories } from '@/lib/douban.client';
+// ✅ 恢复使用 getDoubanCategories（和分类页一样）
+import { getDoubanCategories } from '@/lib/douban.client';
 import { DoubanItem } from '@/lib/types';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
@@ -85,7 +85,7 @@ function HomeClient() {
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
   // ============================================================
-  // 🔧 核心改动：从 /api/douban 代理获取数据
+  // ✅ 核心改动：恢复使用 getDoubanCategories（和分类页一样）
   // ============================================================
   useEffect(() => {
     const fetchRecommendData = async () => {
@@ -101,50 +101,43 @@ function HomeClient() {
           return;
         }
 
-        // 🔧 调用 /api/douban 代理接口
-        // 参数说明：
-        //   type: 'movie' 或 'tv'
-        //   tag: 分类标签，如 '热门'、'综艺'、'top250' 等
-        //   pageSize: 每页数量，默认16
-        const [moviesRes, tvShowsRes, varietyShowsRes, bangumiCalendarData] =
+        // ✅ 使用 getDoubanCategories（和分类页完全一样）
+        const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
           await Promise.all([
-            fetch('/api/douban?type=movie&tag=热门&pageSize=16').then((res) =>
-              res.json()
-            ),
-            fetch('/api/douban?type=tv&tag=热门&pageSize=16').then((res) =>
-              res.json()
-            ),
-            fetch('/api/douban?type=tv&tag=综艺&pageSize=16').then((res) =>
-              res.json()
-            ),
+            getDoubanCategories({
+              kind: 'movie',
+              category: '热门',
+              type: '全部',
+            }),
+            getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
+            getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
             GetBangumiCalendarData(),
           ]);
 
         // 处理电影数据
-        if (moviesRes.code === 200) {
-          setHotMovies(moviesRes.list);
+        if (moviesData.code === 200) {
+          setHotMovies(moviesData.list);
         } else {
-          console.warn('获取热门电影数据失败:', moviesRes);
+          console.warn('获取热门电影数据失败:', moviesData);
           setHotMovies([]);
         }
 
         // 处理剧集数据
-        if (tvShowsRes.code === 200) {
-          setHotTvShows(tvShowsRes.list);
+        if (tvShowsData.code === 200) {
+          setHotTvShows(tvShowsData.list);
         } else {
-          console.warn('获取热门剧集数据失败:', tvShowsRes);
+          console.warn('获取热门剧集数据失败:', tvShowsData);
           setHotTvShows([]);
         }
 
         // 处理综艺数据
-        if (varietyShowsRes.code === 200) {
-          setHotVarietyShows(varietyShowsRes.list);
+        if (varietyShowsData.code === 200) {
+          setHotVarietyShows(varietyShowsData.list);
         } else {
-          console.warn('获取热门综艺数据失败:', varietyShowsRes);
+          console.warn('获取热门综艺数据失败:', varietyShowsData);
           setHotVarietyShows([]);
         }
 
-        // 新番放送数据
         setBangumiCalendarData(bangumiCalendarData);
       } catch (error) {
         console.error('获取推荐数据失败:', error);
