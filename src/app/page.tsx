@@ -18,7 +18,8 @@ import {
   getAllPlayRecords,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
-import { getDoubanCategories } from '@/lib/douban.client';
+// ⚠️ 不再需要 getDoubanCategories，改用 /api/douban
+// import { getDoubanCategories } from '@/lib/douban.client';
 import { DoubanItem } from '@/lib/types';
 
 import CapsuleSwitch from '@/components/CapsuleSwitch';
@@ -83,6 +84,9 @@ function HomeClient() {
 
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
 
+  // ============================================================
+  // 🔧 核心改动：从 /api/douban 代理获取数据
+  // ============================================================
   useEffect(() => {
     const fetchRecommendData = async () => {
       try {
@@ -93,39 +97,60 @@ function HomeClient() {
         const isSimpleMode = savedSimpleMode ? JSON.parse(savedSimpleMode) : false;
 
         if (isSimpleMode) {
-          // 简洁模式下跳过豆瓣数据获取
           setLoading(false);
           return;
         }
 
-        // 并行获取热门电影、热门剧集和热门综艺
-        const [moviesData, tvShowsData, varietyShowsData, bangumiCalendarData] =
+        // 🔧 调用 /api/douban 代理接口
+        // 参数说明：
+        //   type: 'movie' 或 'tv'
+        //   tag: 分类标签，如 '热门'、'综艺'、'top250' 等
+        //   pageSize: 每页数量，默认16
+        const [moviesRes, tvShowsRes, varietyShowsRes, bangumiCalendarData] =
           await Promise.all([
-            getDoubanCategories({
-              kind: 'movie',
-              category: '热门',
-              type: '全部',
-            }),
-            getDoubanCategories({ kind: 'tv', category: 'tv', type: 'tv' }),
-            getDoubanCategories({ kind: 'tv', category: 'show', type: 'show' }),
+            fetch('/api/douban?type=movie&tag=热门&pageSize=16').then((res) =>
+              res.json()
+            ),
+            fetch('/api/douban?type=tv&tag=热门&pageSize=16').then((res) =>
+              res.json()
+            ),
+            fetch('/api/douban?type=tv&tag=综艺&pageSize=16').then((res) =>
+              res.json()
+            ),
             GetBangumiCalendarData(),
           ]);
 
-        if (moviesData.code === 200) {
-          setHotMovies(moviesData.list);
+        // 处理电影数据
+        if (moviesRes.code === 200) {
+          setHotMovies(moviesRes.list);
+        } else {
+          console.warn('获取热门电影数据失败:', moviesRes);
+          setHotMovies([]);
         }
 
-        if (tvShowsData.code === 200) {
-          setHotTvShows(tvShowsData.list);
+        // 处理剧集数据
+        if (tvShowsRes.code === 200) {
+          setHotTvShows(tvShowsRes.list);
+        } else {
+          console.warn('获取热门剧集数据失败:', tvShowsRes);
+          setHotTvShows([]);
         }
 
-        if (varietyShowsData.code === 200) {
-          setHotVarietyShows(varietyShowsData.list);
+        // 处理综艺数据
+        if (varietyShowsRes.code === 200) {
+          setHotVarietyShows(varietyShowsRes.list);
+        } else {
+          console.warn('获取热门综艺数据失败:', varietyShowsRes);
+          setHotVarietyShows([]);
         }
 
+        // 新番放送数据
         setBangumiCalendarData(bangumiCalendarData);
       } catch (error) {
         console.error('获取推荐数据失败:', error);
+        setHotMovies([]);
+        setHotTvShows([]);
+        setHotVarietyShows([]);
       } finally {
         setLoading(false);
       }
@@ -138,7 +163,6 @@ function HomeClient() {
   const updateFavoriteItems = async (allFavorites: Record<string, any>) => {
     const allPlayRecords = await getAllPlayRecords();
 
-    // 根据保存时间排序（从近到远）
     const sorted = Object.entries(allFavorites)
       .sort(([, a], [, b]) => b.save_time - a.save_time)
       .map(([key, fav]) => {
@@ -146,7 +170,6 @@ function HomeClient() {
         const source = key.slice(0, plusIndex);
         const id = key.slice(plusIndex + 1);
 
-        // 查找对应的播放记录，获取当前集数
         const playRecord = allPlayRecords[key];
         const currentEpisode = playRecord?.index;
 
@@ -176,7 +199,6 @@ function HomeClient() {
 
     loadFavorites();
 
-    // 监听收藏更新事件
     const unsubscribe = subscribeToDataUpdates(
       'favoritesUpdated',
       (newFavorites: Record<string, any>) => {
@@ -189,7 +211,7 @@ function HomeClient() {
 
   const handleCloseAnnouncement = (announcement: string) => {
     setShowAnnouncement(false);
-    localStorage.setItem('hasSeenAnnouncement', announcement); // 记录已查看弹窗
+    localStorage.setItem('hasSeenAnnouncement', announcement);
   };
 
   return (
@@ -213,10 +235,8 @@ function HomeClient() {
 
         <div className='max-w-[95%] mx-auto'>
           {activeTab === 'history' ? (
-            // 历史视图 - 显示所有播放记录的网格布局
             <ContinueWatching showAll={true} />
           ) : activeTab === 'favorites' ? (
-            // 收藏夹视图
             <section className='mb-8'>
               <div className='mb-4 flex items-center justify-between'>
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
@@ -270,12 +290,9 @@ function HomeClient() {
               </div>
             </section>
           ) : (
-            // 首页视图
             <>
-              {/* 继续观看 - 组件内部已处理简洁模式 */}
               <ContinueWatching />
 
-              {/* 简洁模式下只显示收藏夹，但在服务器端渲染时先不渲染 */}
               {isClient && !simpleMode && (
                 <>
                   {/* 热门电影 */}
@@ -295,8 +312,7 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? // 加载状态显示灰色占位数据
-                          Array.from({ length: 8 }).map((_, index) => (
+                        ? Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -307,8 +323,7 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : // 显示真实数据
-                          hotMovies.map((movie, index) => (
+                        : hotMovies.map((movie, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -344,8 +359,7 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? // 加载状态显示灰色占位数据
-                          Array.from({ length: 8 }).map((_, index) => (
+                        ? Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -356,8 +370,7 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : // 显示真实数据
-                          hotTvShows.map((show, index) => (
+                        : hotTvShows.map((show, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -392,8 +405,7 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? // 加载状态显示灰色占位数据
-                          Array.from({ length: 8 }).map((_, index) => (
+                        ? Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -404,9 +416,7 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : // 展示当前日期的番剧
-                          (() => {
-                            // 获取当前日期对应的星期
+                        : (() => {
                             const today = new Date();
                             const weekdays = [
                               'Sun',
@@ -419,7 +429,6 @@ function HomeClient() {
                             ];
                             const currentWeekday = weekdays[today.getDay()];
 
-                            // 找到当前星期对应的番剧数据
                             const todayAnimes =
                               bangumiCalendarData.find(
                                 (item) => item.weekday.en === currentWeekday
@@ -468,8 +477,7 @@ function HomeClient() {
                     </div>
                     <ScrollableRow>
                       {loading
-                        ? // 加载状态显示灰色占位数据
-                          Array.from({ length: 8 }).map((_, index) => (
+                        ? Array.from({ length: 8 }).map((_, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
@@ -480,8 +488,7 @@ function HomeClient() {
                               <div className='mt-2 h-4 bg-gray-200 rounded animate-pulse dark:bg-gray-800'></div>
                             </div>
                           ))
-                        : // 显示真实数据
-                          hotVarietyShows.map((show, index) => (
+                        : hotVarietyShows.map((show, index) => (
                             <div
                               key={index}
                               className='min-w-[96px] w-24 sm:min-w-[180px] sm:w-44'
