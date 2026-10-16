@@ -3,6 +3,7 @@
 import { getStorage } from '@/lib/db';
 
 import { AdminConfig } from './admin.types';
+import { getDefaultPlaybackSaveInterval } from './playback-settings';
 import runtimeConfig from './runtime';
 
 export interface ApiSite {
@@ -328,6 +329,9 @@ async function initConfig() {
             DoubanImageProxyType:
               process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'direct',
             DoubanImageProxy: process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '',
+            BangumiProxy: process.env.NEXT_PUBLIC_BANGUMI_PROXY || '',
+            BangumiImageProxy:
+              process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY || '',
             DisableYellowFilter:
           process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
             DanmakuApiBaseUrl:
@@ -335,6 +339,9 @@ async function initConfig() {
               '',
         TVBoxEnabled: false,
         TVBoxPassword: '',
+        PlaybackSaveInterval:
+          Number(process.env.NEXT_PUBLIC_PLAYBACK_SAVE_INTERVAL) ||
+          getDefaultPlaybackSaveInterval(storageType),
           },
           UserConfig: {
             AllowRegister: process.env.NEXT_PUBLIC_ENABLE_REGISTER === 'true',
@@ -388,6 +395,9 @@ async function initConfig() {
         DoubanImageProxyType:
           process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'direct',
         DoubanImageProxy: process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '',
+        BangumiProxy: process.env.NEXT_PUBLIC_BANGUMI_PROXY || '',
+        BangumiImageProxy:
+          process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY || '',
         DisableYellowFilter:
           process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
         DanmakuApiBaseUrl:
@@ -395,6 +405,9 @@ async function initConfig() {
           '',
         TVBoxEnabled: false,
         TVBoxPassword: '',
+        PlaybackSaveInterval:
+          Number(process.env.NEXT_PUBLIC_PLAYBACK_SAVE_INTERVAL) ||
+          getDefaultPlaybackSaveInterval(storageType),
       },
       UserConfig: {
         AllowRegister: process.env.NEXT_PUBLIC_ENABLE_REGISTER === 'true',
@@ -461,6 +474,12 @@ export async function getConfig(): Promise<AdminConfig> {
       adminConfig.SiteConfig.DoubanImageProxyType || process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'direct';
     adminConfig.SiteConfig.DoubanImageProxy =
       adminConfig.SiteConfig.DoubanImageProxy || process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '';
+    adminConfig.SiteConfig.BangumiProxy =
+      adminConfig.SiteConfig.BangumiProxy || process.env.NEXT_PUBLIC_BANGUMI_PROXY || '';
+    adminConfig.SiteConfig.BangumiImageProxy =
+      adminConfig.SiteConfig.BangumiImageProxy ||
+      process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY ||
+      '';
     adminConfig.SiteConfig.DisableYellowFilter =
       typeof adminConfig.SiteConfig.DisableYellowFilter === 'boolean'
         ? adminConfig.SiteConfig.DisableYellowFilter
@@ -471,6 +490,15 @@ export async function getConfig(): Promise<AdminConfig> {
       adminConfig.SiteConfig.DanmakuApiBaseUrl ||
       process.env.NEXT_PUBLIC_DANMU_API_BASE_URL ||
       '';
+    // 播放进度自动保存间隔（秒）：数据库优先，其次环境变量，最后按存储类型取默认值
+    adminConfig.SiteConfig.PlaybackSaveInterval =
+      typeof adminConfig.SiteConfig.PlaybackSaveInterval === 'number' &&
+      adminConfig.SiteConfig.PlaybackSaveInterval > 0
+        ? adminConfig.SiteConfig.PlaybackSaveInterval
+        : Number(process.env.NEXT_PUBLIC_PLAYBACK_SAVE_INTERVAL) ||
+          getDefaultPlaybackSaveInterval(
+            process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage'
+          );
     // TVBox 开关与密码默认值
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
     if (storageType === 'localstorage') {
@@ -745,6 +773,9 @@ export async function resetConfig() {
       DoubanImageProxyType:
         process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE || 'direct',
       DoubanImageProxy: process.env.NEXT_PUBLIC_DOUBAN_IMAGE_PROXY || '',
+      BangumiProxy: process.env.NEXT_PUBLIC_BANGUMI_PROXY || '',
+      BangumiImageProxy:
+        process.env.NEXT_PUBLIC_BANGUMI_IMAGE_PROXY || '',
       DisableYellowFilter:
         process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true',
         DanmakuApiBaseUrl:
@@ -752,6 +783,9 @@ export async function resetConfig() {
           '',
         TVBoxEnabled: false,
         TVBoxPassword: '',
+        PlaybackSaveInterval:
+          Number(process.env.NEXT_PUBLIC_PLAYBACK_SAVE_INTERVAL) ||
+          getDefaultPlaybackSaveInterval(storageType),
     },
     UserConfig: {
       AllowRegister: process.env.NEXT_PUBLIC_ENABLE_REGISTER === 'true',
